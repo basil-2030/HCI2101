@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>لعبة XO — HCI2101</title>
+<style>
+  :root{
+    --bg:#0f172a;
+    --card:rgba(255,255,255,.06);
+    --card-border:rgba(255,255,255,.12);
+    --primary:#38bdf8;
+    --muted:#94a3b8;
+    --win:#22c55e;
+    --lose:#ef4444;
+    --draw:#f59e0b;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background: radial-gradient(1000px 600px at 20% 10%, rgba(56,189,248,.2), transparent 40%),
+                radial-gradient(800px 500px at 90% 80%, rgba(99,102,241,.18), transparent 40%),
+                var(--bg);
+    color:#fff;font-family: ui-rounded, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Kufi Arabic", Tahoma, sans-serif;
+  }
+  .app{
+    width:min(980px, 96vw);
+    display:grid;gap:18px;
+  }
+  .glass{
+    background:var(--card); backdrop-filter: blur(12px);
+    border:1px solid var(--card-border);
+    border-radius:18px; padding:18px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.06);
+  }
+  header .title{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  }
+  header h1{margin:0;font-size:clamp(20px, 2.4vw + 12px, 28px);color:var(--primary)}
+  header p{margin:0;color:var(--muted)}
+  .screen{display:none}
+  .screen.active{display:block;animation:fade .25s ease}
+  @keyframes fade{from{opacity:.5;transform:translateY(4px)} to{opacity:1;transform:none}}
+  .start-form{
+    display:grid;gap:14px;grid-template-columns:1fr; margin-top:8px;
+  }
+  label{font-size:14px;color:#cbd5e1}
+  input, select, button{
+    width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--card-border);
+    background:rgba(15,23,42,.6);color:#fff;outline:none;
+  }
+  input::placeholder{color:#94a3b8}
+  .row{display:grid;gap:12px}
+  @media(min-width:640px){ .row{grid-template-columns:1fr 1fr} }
+  .actions{display:flex;gap:10px;flex-wrap:wrap}
+  .btn{
+    cursor:pointer;border:1px solid var(--card-border); background:linear-gradient(180deg, rgba(56,189,248,.22), rgba(56,189,248,.08));
+    color:#e6f7ff; font-weight:600; letter-spacing:.2px;
+  }
+  .btn.secondary{background:rgba(148,163,184,.1)}
+  .notice{font-size:13px;color:var(--muted)}
+  /* Board */
+  .hud{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+  .badges{display:flex;gap:10px;flex-wrap:wrap}
+  .badge{
+    padding:8px 12px;border-radius:999px;border:1px solid var(--card-border);background:rgba(255,255,255,.04);
+    color:#cbd5e1;font-size:13px
+  }
+  .turn{color:#fff}
+  .board{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:10px; margin-top:8px;
+    user-select:none; touch-action:manipulation;
+  }
+  .cell{
+    aspect-ratio:1;border-radius:16px;border:1px solid var(--card-border);background:rgba(255,255,255,.04);
+    display:grid;place-items:center;font-size:clamp(40px, 8.2vw, 72px);font-weight:800;cursor:pointer;
+    transition:transform .08s ease, background .2s ease;
+  }
+  .cell:hover{transform:translateY(-2px);background:rgba(255,255,255,.08)}
+  .cell.disabled{pointer-events:none;opacity:.7}
+  .cell.win{background:rgba(34,197,94,.16);border-color:rgba(34,197,94,.4)}
+  .result{
+    margin-top:12px;padding:12px;border-radius:14px;border:1px solid var(--card-border);background:rgba(255,255,255,.04);
+    display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap
+  }
+  .result .msg{font-weight:700}
+  .result.win{color:#bbf7d0;border-color:rgba(34,197,94,.35)}
+  .result.lose{color:#fecaca;border-color:rgba(239,68,68,.35)}
+  .result.draw{color:#fde68a;border-color:rgba(245,158,11,.35)}
+  footer{
+    margin-top:16px;font-size:13px;color:#e2e8f0
+  }
+  footer .meta{
+    display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:center
+  }
+  footer .meta span{opacity:.9}
+</style>
+</head>
+<body>
+  <div class="app">
+
+    <header class="glass">
+      <div class="title">
+        <h1>لعبة XO — HCI2101</h1>
+        <p>واجهة عربية • تصميم عصري • يدعم لاعب واحد/لاعبين</p>
+      </div>
+    </header>
+
+    <!-- شاشة البداية -->
+    <section id="start" class="screen glass active">
+      <div class="start-form">
+        <div class="row">
+          <div>
+            <label for="mode">وضع اللعب</label>
+            <select id="mode">
+              <option value="single">لاعب واحد (ضد الذكاء الاصطناعي)</option>
+              <option value="two">لاعبان</option>
+            </select>
+          </div>
+          <div>
+            <label for="first">من يبدأ؟</label>
+            <select id="first">
+              <option value="p1">اللاعب الأول (X)</option>
+              <option value="p2">اللاعب الثاني / الذكاء الاصطناعي (O)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="p1">اسم اللاعب الأول</label>
+            <input id="p1" type="text" placeholder="مثال: باسل" />
+          </div>
+          <div id="p2Wrap">
+            <label for="p2">اسم اللاعب الثاني</label>
+            <input id="p2" type="text" placeholder="مثال: علي" />
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn" id="startBtn">ابدأ اللعبة</button>
+          <button class="btn secondary" id="fillExample">تعبئة تلقائية</button>
+        </div>
+        <p class="notice">تلميح: في وضع اللاعب الواحد يمكنك اختيار من يبدأ أولاً.</p>
+      </div>
+    </section>
+
+    <!-- شاشة اللعب -->
+    <section id="game" class="screen glass">
+      <div class="hud">
+        <div class="badges">
+          <div class="badge" id="bP1">X — <span id="nP1">اللاعب الأول</span></div>
+          <div class="badge" id="bP2">O — <span id="nP2">اللاعب الثاني</span></div>
+          <div class="badge">الوضع: <span id="modeLabel">لاعبان</span></div>
+        </div>
+        <div class="turn" id="turnLabel">الدور: —</div>
+      </div>
+
+      <div class="board" id="board">
+        <div class="cell" data-i="0"></div>
+        <div class="cell" data-i="1"></div>
+        <div class="cell" data-i="2"></div>
+        <div class="cell" data-i="3"></div>
+        <div class="cell" data-i="4"></div>
+        <div class="cell" data-i="5"></div>
+        <div class="cell" data-i="6"></div>
+        <div class="cell" data-i="7"></div>
+        <div class="cell" data-i="8"></div>
+      </div>
+
+      <div class="result" id="result" style="display:none">
+        <span class="msg" id="resultMsg"></span>
+        <div class="actions">
+          <button class="btn" id="again">جولة جديدة</button>
+          <button class="btn secondary" id="back">رجوع للشاشة الرئيسية</button>
+        </div>
+      </div>
+
+      <footer>
+        <div class="meta">
+          <span>Student Name: <strong>BASIL ALI SALEH ALZAHRANI</strong> ( <strong>باسل علي صالح الزهراني</strong> )</span>
+          <span>• Student ID: <strong>445010156</strong></span>
+          <span>• Supervised by: <strong>Mohammed Ahmed Jabali</strong></span>
+        </div>
+      </footer>
+    </section>
+
+  </div>
+
+<script>
+(() => {
+  const start = document.getElementById('start');
+  const game  = document.getElementById('game');
+  const modeSel = document.getElementById('mode');
+  const firstSel = document.getElementById('first');
+  const p1Inp = document.getElementById('p1');
+  const p2Inp = document.getElementById('p2');
+  const p2Wrap = document.getElementById('p2Wrap');
+  const startBtn = document.getElementById('startBtn');
+  const fillExample = document.getElementById('fillExample');
+
+  const boardEl = document.getElementById('board');
+  const cells = [...boardEl.querySelectorAll('.cell')];
+  const turnLabel = document.getElementById('turnLabel');
+  const modeLabel = document.getElementById('modeLabel');
+  const nP1 = document.getElementById('nP1');
+  const nP2 = document.getElementById('nP2');
+  const result = document.getElementById('result');
+  const resultMsg = document.getElementById('resultMsg');
+  const again = document.getElementById('again');
+  const back = document.getElementById('back');
+
+  let state = {
+    board: Array(9).fill(''),
+    turn: 'X',
+    mode: 'two',   // 'single' or 'two'
+    p1: 'اللاعب الأول',
+    p2: 'اللاعب الثاني',
+    ai: 'O',       // رمز الذكاء الاصطناعي عندما يكون single
+    human: 'X',
+    gameOver: false
+  };
+
+  const wins = [
+    [0,1,2],[3,4,5],[6,7,8],
+    [0,3,6],[1,4,7],[2,5,8],
+    [0,4,8],[2,4,6]
+  ];
+
+  // تحديث إظهار حقل اللاعب الثاني بناءً على الوضع
+  modeSel.addEventListener('change', () => {
+    const single = modeSel.value === 'single';
+    p2Wrap.style.display = single ? 'none' : 'block';
+  });
+
+  fillExample.addEventListener('click', () => {
+    p1Inp.value = 'باسل';
+    if (modeSel.value === 'two') p2Inp.value = 'علي';
+  });
+
+  function setScreen(id){
+    [start, game].forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  function resetBoard(){
+    state.board = Array(9).fill('');
+    state.gameOver = false;
+    cells.forEach(c => { c.textContent=''; c.classList.remove('disabled','win'); });
+    result.style.display='none';
+    updateTurnLabel();
+  }
+
+  function startGame(){
+    const mode = modeSel.value; // 'single' or 'two'
+    const first = firstSel.value; // 'p1' or 'p2'
+    const p1 = p1Inp.value.trim() || 'اللاعب الأول';
+    const p2 = (mode==='two' ? (p2Inp.value.trim() || 'اللاعب الثاني') : 'الذكاء الاصطناعي');
+
+    state.mode = mode;
+    state.p1 = p1;
+    state.p2 = p2;
+
+    // تعيين من يبدأ ومن يكون X/O
+    if(first==='p1'){
+      state.turn = 'X';
+      state.human = 'X';
+      state.ai = 'O';
+    }else{
+      state.turn = 'O';
+      // إذا وضع لاعب واحد، يبدأ الذكاء الاصطناعي
+      state.human = 'X';
+      state.ai = 'O';
+    }
+
+    // عرض أسماء اللاعبين
+    nP1.textContent = state.p1;
+    nP2.textContent = state.p2;
+    modeLabel.textContent = (mode==='single') ? 'لاعب واحد' : 'لاعبان';
+
+    setScreen('game');
+    resetBoard();
+
+    // إذا اختار أن يبدأ اللاعب الثاني والطور فردي → اجعل الذكاء يلعب أولاً
+    if(mode==='single' && first==='p2'){
+      aiMove();
+    }
+  }
+
+  startBtn.addEventListener('click', startGame);
+
+  function updateTurnLabel(){
+    const name = (state.turn==='X') ? state.p1 : state.p2;
+    turnLabel.textContent = `الدور: ${name} (${state.turn})`;
+  }
+
+  function availableMoves(b){
+    const arr=[];
+    for(let i=0;i<9;i++){ if(!b[i]) arr.push(i); }
+    return arr;
+  }
+
+  function checkWinner(b){
+    for(const [a,m,n] of wins){
+      if(b[a] && b[a]===b[m] && b[a]===b[n]){
+        return {winner:b[a], line:[a,m,n]};
+      }
+    }
+    if(b.every(x=>x)) return {winner:'draw'};
+    return null;
+  }
+
+  // خوارزمية Minimax مع تحسين بسيط (ترجيح المركز والزايا)
+  function minimax(b, player, depth=0){
+    const res = checkWinner(b);
+    if(res){
+      if(res.winner==='draw') return {score:0};
+      return {score: res.winner===state.ai ? 10-depth : depth-10};
+    }
+
+    const moves = availableMoves(b);
+    const scores=[];
+
+    for(const i of moves){
+      b[i]=player;
+      const next = minimax(b, player===state.ai ? state.human : state.ai, depth+1);
+      scores.push({i, score: next.score});
+      b[i]='';
+    }
+
+    // تحسين: إذا تعادل، فضّل الخانات (4 ثم الزوايا)
+    const prefer=[4,0,2,6,8,1,3,5,7];
+
+    if(player===state.ai){
+      let best = Math.max(...scores.map(s=>s.score));
+      let cands = scores.filter(s=>s.score===best);
+      if(cands.length>1){
+        cands.sort((a,b)=> prefer.indexOf(a.i)-prefer.indexOf(b.i));
+      }
+      return cands[0];
+    }else{
+      let best = Math.min(...scores.map(s=>s.score));
+      let cands = scores.filter(s=>s.score===best);
+      if(cands.length>1){
+        cands.sort((a,b)=> prefer.indexOf(a.i)-prefer.indexOf(b.i));
+      }
+      return cands[0];
+    }
+  }
+
+  function aiMove(){
+    if(state.gameOver) return;
+    // اختيار الحركة المثلى
+    const b = state.board.slice();
+    const move = minimax(b, state.ai);
+    const idx = (move && move.i!=null) ? move.i : availableMoves(state.board)[0];
+    place(idx, state.ai);
+  }
+
+  function endGame(res){
+    state.gameOver = true;
+    cells.forEach(c=>c.classList.add('disabled'));
+
+    let cls='draw', msg='تعادل! أحسنتم 👏';
+    if(res.winner==='X'){
+      cls='win'; msg = `فوز ${state.p1} (X) 🎉`;
+    }else if(res.winner==='O'){
+      cls='lose';
+      const who = (state.mode==='single') ? 'الذكاء الاصطناعي' : state.p2;
+      msg = `فوز ${who} (O) 🎉`;
+    }
+    result.className = `result ${cls}`;
+    resultMsg.textContent = msg;
+    result.style.display='flex';
+
+    if(res.line){
+      res.line.forEach(i=>cells[i].classList.add('win'));
+    }
+  }
+
+  function place(i, sym){
+    if(state.board[i] || state.gameOver) return;
+    state.board[i]=sym;
+    cells[i].textContent = sym;
+    cells[i].classList.add('disabled');
+
+    const res = checkWinner(state.board);
+    if(res){ endGame(res); return; }
+
+    // تبديل الدور
+    state.turn = (state.turn==='X') ? 'O' : 'X';
+    updateTurnLabel();
+
+    // في وضع اللاعب الواحد، دع الذكاء يلعب تلقائياً عندما يحين دوره
+    if(state.mode==='single' && state.turn===state.ai){
+      setTimeout(aiMove, 220);
+    }
+  }
+
+  cells.forEach(cell=>{
+    cell.addEventListener('click', ()=>{
+      const i = +cell.dataset.i;
+      if(state.mode==='single'){
+        // اللاعب البشري يلعب فقط عندما يكون دوره
+        const expected = state.human;
+        if(state.turn!==expected) return;
+        place(i, expected);
+      }else{
+        // وضع لاعبين
+        place(i, state.turn);
+      }
+    });
+  });
+
+  again.addEventListener('click', resetBoard);
+  back.addEventListener('click', ()=> setScreen('start'));
+
+  // تحسين تجربة الإدخال: Enter يبدأ اللعبة
+  [p1Inp, p2Inp].forEach(inp => inp.addEventListener('keydown', e=>{
+    if(e.key==='Enter') startGame();
+  }));
+
+})();
+</script>
+</body>
+</html>
